@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Coffee Extraction Calculator — PoC</title>
+  <!-- 引入外部样式（已分离为 style.css） -->
+  <link rel="stylesheet" href="style.css">
+  <!-- KaTeX CDN，用于渲染数学公式（可选） -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" crossorigin="anonymous">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <h1>Coffee Extraction Calculator — PoC</h1>
+  <div class="card">
+    <div class="modes">
+      <label><input type="radio" name="mode" value="ratio" checked> 粉水比模式 (Dose / Brew Ratio)</label>
+      <label><input type="radio" name="mode" value="beverage"> 粉液比模式 (Dose / Beverage)</label>
+    </div>
+
+    <div id="inputs">
+      <div class="row">
+        <div class="col">
+          <label>咖啡粉量 dose (g)</label>
+          <input id="dose" type="number" min="0" step="0.1" value="20">
+        </div>
+        <div class="col" id="ratioCol">
+          <label>粉水比 ratio (如 15 表示 1:15)</label>
+          <input id="ratio" type="number" min="0" step="0.1" value="15">
+        </div>
+        <div class="col" id="beverageCol" style="display:none">
+          <label>咖啡液重 beverage (g)</label>
+          <input id="beverage" type="number" min="0" step="0.1" value="300">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col">
+          <label>冲泡方式 brewType</label>
+          <select id="brewType">
+            <option value="drip">Drip</option>
+            <option value="espresso">Espresso</option>
+          </select>
+        </div>
+        <div class="col">
+          <label>咖啡浓度 tds (%)</label>
+          <input id="tds" type="number" min="0" step="0.01" value="1.25">
+        </div>
+        <div class="col">
+          <label>目标浓度 target tds (%)（Bypass）</label>
+          <input id="targetTds" type="number" min="0" step="0.01" value="1.00">
+        </div>
+      </div>
+
+      <div class="hint">数值单位：克 / 百分比。重量保留 1 位小数；浓度与萃取率保留 2 位小数。</div>
+    </div>
+  </div>
+
+  <div class="outputs">
+    <div class="out">
+      <div class="small">萃取率 (EY)</div>
+      <div id="ey" style="font-size:18px;margin-top:6px">-</div>
+    </div>
+    <div class="out">
+      <div class="small">咖啡液重 (beverage)</div>
+      <div id="outBeverage" style="font-size:18px;margin-top:6px">-</div>
+    </div>
+    <div class="out">
+      <div class="small">需要 Bypass 的水量 (g)</div>
+      <div id="bypass" style="font-size:18px;margin-top:6px">-</div>
+    </div>
+    <div class="out">
+      <div class="small">当前配方摘要</div>
+      <div id="summary" style="font-size:14px;margin-top:6px">-</div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="small">PoC: 所有计算即时响应；非法或缺失输入不计算并给出提示。</div>
+  </footer>
+
+  <!-- 计算过程展示区（使用 KaTeX 渲染公式，如不可用则使用纯文本） -->
+  <div class="card" id="calcArea" style="margin-top:14px">
+    <div class="small">计算过程</div>
+    <div id="calcSteps" style="margin-top:8px;font-size:14px;line-height:1.5">-</div>
+  </div>
+  <!-- 引入分离出的脚本文件 -->
+  <script src="script.js" defer></script>
+</body>
+</html>
