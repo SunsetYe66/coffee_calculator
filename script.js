@@ -23,8 +23,32 @@ const outBypass = document.getElementById('bypass');
 const outSummary = document.getElementById('summary');
 const calcStepsEl = document.getElementById('calcSteps');
 
+// Tab 与模式支持：优先使用新 Tab 控件，其次回退到旧的 radio（如果存在）
+const modeTabs = document.querySelectorAll('.mode-tab');
+
 // 返回当前模式：'ratio' 或 'beverage'
-function getMode(){ return document.querySelector('input[name="mode"]:checked').value }
+function getMode(){
+  const selTab = document.querySelector('.mode-tab[aria-selected="true"]');
+  if (selTab) return selTab.dataset.mode;
+  const radio = document.querySelector('input[name="mode"]:checked');
+  return radio ? radio.value : 'ratio';
+}
+
+function setModeUI(mode){
+  // 设置 tab 状态
+  modeTabs.forEach(btn=>{
+    const m = btn.dataset.mode;
+    btn.setAttribute('aria-selected', m === mode ? 'true' : 'false');
+  });
+  // 显示/隐藏输入列
+  if (mode === 'ratio'){
+    ratioCol.style.display = '';
+    beverageCol.style.display = 'none';
+  } else {
+    ratioCol.style.display = 'none';
+    beverageCol.style.display = '';
+  }
+}
 
 // 吸水系数：espresso=1.5，drip=2.0
 function absorptionFor(type){
@@ -156,16 +180,22 @@ function compute(){
   renderSteps(ctx);
 }
 
-// 模式切换逻辑：显示/隐藏 ratio/beverage 输入域
+// Tab 点击逻辑：切换模式并触发计算
+modeTabs.forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const m = btn.dataset.mode;
+    setModeUI(m);
+    // 如果页面仍有旧的 radio，可以同步它（可选）
+    const radio = document.querySelector(`input[name="mode"][value="${m}"]`);
+    if (radio) radio.checked = true;
+    compute();
+  });
+});
+
+// 兼容旧有 radio 的 change 事件（如果存在）
 modeRadios.forEach(r => r.addEventListener('change', ()=>{
   const m = getMode();
-  if (m === 'ratio'){
-    ratioCol.style.display = '';
-    beverageCol.style.display = 'none';
-  } else {
-    ratioCol.style.display = 'none';
-    beverageCol.style.display = '';
-  }
+  setModeUI(m);
   compute();
 }));
 
@@ -174,5 +204,6 @@ modeRadios.forEach(r => r.addEventListener('change', ()=>{
   el.addEventListener('input', compute);
 });
 
-// 页面加载完成后首次计算
+// 页面加载完成后，确保 UI 与当前模式一致，然后首次计算
+setModeUI( getMode() );
 compute();
