@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Coffee Extraction Calculator — PoC</title>
+  <title>Coffee Extraction Calculator</title>
   <!-- 引入外部样式（已分离为 style.css） -->
   <link rel="stylesheet" href="style.css">
   <!-- KaTeX CDN，用于渲染数学公式（可选） -->
@@ -91,7 +91,7 @@
   </style>
 </head>
 <body>
-  <h1>Coffee Extraction Calculator — PoC</h1>
+  <h1>Extraction Calculator | <a href="divide.html">Divide Calculator</a></h1>
   <div class="card">
     <div class="modes" role="tablist" aria-label="模式选择">
       <button class="mode-tab" role="tab" aria-selected="true" data-mode="ratio">粉水比模式 (Dose / Brew Ratio)</button>
@@ -154,10 +154,6 @@
       <div id="summary" style="font-size:14px;margin-top:6px">-</div>
     </div>
   </div>
-
-  <footer>
-    <div class="small">PoC: 所有计算即时响应；非法或缺失输入不计算并给出提示。</div>
-  </footer>
 
   <!-- 计算过程展示区（使用 KaTeX 渲染公式，如不可用则使用纯文本） -->
   <div class="card" id="calcArea" style="margin-top:14px">

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Coffee Divide Calculator</title>
+  <!-- 引入外部样式（已分离为 style.css） -->
+  <link rel="stylesheet" href="style.css">
+  <!-- KaTeX CDN，用于渲染数学公式（可选） -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" crossorigin="anonymous">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js" crossorigin="anonymous"></script>
+  <style>
+    /* 全局盒模型，避免宽度计算导致溢出 */
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    .modes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .modes label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+    }
+
+    .modes input[type="radio"] {
+      margin: 0;
+      flex: 0 0 auto;
+    }
+
+    /* Tab 样式 */
+    .mode-tab {
+      appearance: none;
+      border: 1px solid #e2e8f0;
+      background: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .mode-tab[aria-selected="true"] {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.02) inset;
+    }
+
+
+    /* 计算区域：普通文本允许换行，遇到超长内容（如 KaTeX 公式）时横向滚动显示完整内容 */
+    #calcArea {
+      max-width: 100%;
+      overflow-x: auto; /* 整个计算区域在必要时横向滚动 */
+      -webkit-overflow-scrolling: touch;
+    }
+
+    #calcSteps {
+      max-width: 100%;
+      overflow-x: auto; /* 允许内部横向滚动以显示完整公式 */
+      -webkit-overflow-scrolling: touch;
+      white-space: normal; /* 普通文本可换行 */
+      word-wrap: break-word;
+    }
+
+    /* KaTeX 渲染区域：防止逐字断行，单独横向滚动公式内容 */
+    .katex, .katex-display {
+      display: inline-block; /* 保持为行内块，随文本流布局 */
+      white-space: nowrap;    /* 不在公式内部逐字换行 */
+      max-width: none;
+      overflow: visible;
+    }
+
+    .katex * {
+      white-space: nowrap !important;
+    }
+
+    /* 一些浏览器滚动样式优化 */
+    #calcArea::-webkit-scrollbar, #calcSteps::-webkit-scrollbar {
+      height: 10px;
+    }
+
+    /* 避免整个页面在极窄视窗下出现最外层阻止收缩的问题 */
+    body, .card {
+      min-width: 0;
+    }
+  </style>
+</head>
+<body>
+  <h1><a href="index.html">Extraction Calculator</a> | Divide Calculator</h1> 
+  <div class="card">
+    <div id="inputs">
+      <div class="row">
+        <div class="col">
+          <label>总克数 total grams</label>
+          <input id="totalGrams" type="number" min="0" step="0.1" value="100">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col">
+          <label>分装大小 1 size1 (g)</label>
+          <input id="size1" type="number" min="0" step="0.1" value="15">
+        </div>
+        <div class="col">
+          <label>分装大小 2 size2 (g)</label>
+          <input id="size2" type="number" min="0" step="0.1" value="13">
+        </div>
+        <div class="col">
+          <label>分装大小 3 size3 (g)</label>
+          <input id="size3" type="number" min="0" step="0.1" value="12">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col">
+          <label>分装大小 4 size4 (g)</label>
+          <input id="size4" type="number" min="0" step="0.1" value="">
+        </div>
+        <div class="col">
+          <label>分装大小 5 size5 (g)</label>
+          <input id="size5" type="number" min="0" step="0.1" value="">
+        </div>
+        <div class="col">
+          <label>必须存在的分装大小</label>
+          <select id="requiredSize">
+            <option value="none">无</option>
+            <option value="size1">size1</option>
+            <option value="size2">size2</option>
+            <option value="size3">size3</option>
+            <option value="size4">size4</option>
+            <option value="size5">size5</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="calculate">计算</button>
+      </div>
+
+      <div class="hint">数值单位：克。重量保留 1 位小数。</div>
+    </div>
+  </div>
+
+  <div class="outputs">
+    <div class="out">
+      <div class="small">最佳总克数 (best value)</div>
+      <div id="bestValue" style="font-size:18px;margin-top:6px">-</div>
+    </div>
+    <div class="out">
+      <div class="small">最佳解决方案 (best solutions)</div>
+      <div id="bestSolutions" style="font-size:14px;margin-top:6px">-</div>
+    </div>
+  </div>
+  <!-- 引入分离出的脚本文件 -->
+  <script src="divide.js" defer></script>
+</body>
+</html>
