@@ -1,137 +1,424 @@
-// divide.js
-// Coffee Divide Calculator Script
+document.addEventListener('DOMContentLoaded', function () {
+  const totalGramsInput = document.getElementById('totalGrams');
+  const maxLossInput = document.getElementById('maxLoss');
+  const sizeInputs = [1, 2, 3, 4, 5].map(function (i) {
+    return document.getElementById('size' + i);
+  });
+  const requiredSizeSelect = document.getElementById('requiredSize');
+  const calculateButton = document.getElementById('calculate');
+  const resultsSection = document.getElementById('results');
+  const summaryEl = document.getElementById('summary');
+  const tabsEl = document.getElementById('strategyTabs');
+  const panelEl = document.getElementById('strategyPanel');
 
-document.addEventListener('DOMContentLoaded', function() {
-    const totalGramsInput = document.getElementById('totalGrams');
-    const sizeInputs = [
-        document.getElementById('size1'),
-        document.getElementById('size2'),
-        document.getElementById('size3'),
-        document.getElementById('size4'),
-        document.getElementById('size5')
-    ];
-    const requiredSizeSelect = document.getElementById('requiredSize');
-    const calculateButton = document.getElementById('calculate');
-    const bestValueDiv = document.getElementById('bestValue');
-    const bestSolutionsDiv = document.getElementById('bestSolutions');
-    const calcStepsDiv = document.getElementById('calcSteps');
+  const STRATEGIES = [
+    {
+      id: 'balance',
+      name: '平衡',
+      desc: '在可接受损失内，同时兼顾“尽量少浪费”与“包数尽量平均”的折中方案。'
+    },
+    {
+      id: 'minwaste',
+      name: '最少浪费',
+      desc: '优先让剩余（损失）尽可能小；不限制包数分布，因此可能比较偏科。'
+    },
+    {
+      id: 'even',
+      name: '规格平均分配',
+      desc: '在可接受损失内，让各规格的包数尽量接近（按包数平均分配）。'
+    }
+  ];
+  const COLORS = ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f'];
+  const EPS = 1e-6;
+  const MAX_NODES = 400000;
+  const STORE_LIMIT = 500;
+  const MAX_SHOWN = 20;
+  const MIN_DIVERGENCE = 0.2;
+  const PAGE_SIZE = 15;
 
-    // Function to update select options text based on current size inputs
-    function updateSelectOptions() {
-        // Clear existing options except the first ("无")
-        while (requiredSizeSelect.options.length > 1) {
-            requiredSizeSelect.remove(1);
-        }
-        // Add options for sizes > 0
-        sizeInputs.forEach((input, index) => {
-            const val = input.value.trim();
-            const size = val === "" ? 0 : parseFloat(val) || 0;
-            if (size > 0) {
-                const option = document.createElement('option');
-                option.value = `size${index+1}`;
-                option.textContent = `size${index+1} (${size}g)`;
-                requiredSizeSelect.appendChild(option);
-            }
-        });
+  let state = null;
+
+  function fmt(x) {
+    return (Math.round(x * 10) / 10).toFixed(1);
+  }
+
+  function trimNum(x) {
+    return Number.isInteger(x) ? String(x) : String(Math.round(x * 10) / 10);
+  }
+
+  function updateSelectOptions() {
+    const current = requiredSizeSelect.value;
+    requiredSizeSelect.innerHTML = '<option value="none">无</option>';
+    sizeInputs.forEach(function (input, index) {
+      const val = input.value.trim();
+      const size = val === '' ? 0 : parseFloat(val);
+      if (!isNaN(size) && size > 0) {
+        const option = document.createElement('option');
+        option.value = 'size' + (index + 1);
+        option.textContent = '规格' + (index + 1) + ' (' + trimNum(size) + 'g)';
+        requiredSizeSelect.appendChild(option);
+      }
+    });
+    const exists = Array.prototype.some.call(requiredSizeSelect.options, function (o) {
+      return o.value === current;
+    });
+    if (exists) requiredSizeSelect.value = current;
+  }
+
+  function enumerate(total, active, requiredActiveIdx) {
+    const k = active.length;
+    const perMax = active.map(function (a) {
+      return Math.floor((total + EPS) / a.size);
+    });
+    let product = 1;
+    perMax.forEach(function (m) { product *= (m + 1); });
+    let cap = Infinity;
+    let capped = false;
+    if (product > MAX_NODES) {
+      capped = true;
+      cap = Math.max(1, Math.ceil(Math.pow(MAX_NODES, 1 / k)));
     }
 
-    // Initial update
-    updateSelectOptions();
+    const list = [];
+    const counts = new Array(k).fill(0);
 
-    // Function to generate a unique key for a solution based on non-zero sizes
-    function formatKey(sol, sizes) {
-        let parts = [];
-        for (let i = 0; i < sol.length; i++) {
-            if (sol[i] > 0 && sizes[i] > 0) {
-                parts.push(`${sizes[i]}g:${sol[i]}`);
-            }
+    function rec(i, remaining, used) {
+      if (i === k) {
+        if (requiredActiveIdx >= 0 && counts[requiredActiveIdx] < 1) return;
+        let mx = -Infinity;
+        let mn = Infinity;
+        let packs = 0;
+        for (let j = 0; j < k; j++) {
+          const c = counts[j];
+          packs += c;
+          if (c > mx) mx = c;
+          if (c < mn) mn = c;
         }
-        return parts.sort().join(',');
+        list.push({ counts: counts.slice(), used: used, waste: total - used, packs: packs, imb: mx - mn });
+        return;
+      }
+      const s = active[i].size;
+      let maxN = Math.floor((remaining + EPS) / s);
+      if (maxN > cap) maxN = cap;
+      for (let n = 0; n <= maxN; n++) {
+        counts[i] = n;
+        rec(i + 1, remaining - n * s, used + n * s);
+      }
+      counts[i] = 0;
     }
 
-    // Function to format a solution
-    function formatSolution(sol, sizes) {
-        let result = [];
-        for (let i = 0; i < sol.length; i++) {
-            if (sol[i] > 0 && sizes[i] > 0) {
-                result.push(`${sizes[i]}g: ${sol[i]} 包<br>`);
-            }
-        }
-        return result.join('');
+    rec(0, total, 0);
+    return { list: list, capped: capped };
+  }
+
+  function canonicalKey(sol, active) {
+    const pairs = [];
+    active.forEach(function (a, j) {
+      if (sol.counts[j] > 0) pairs.push({ s: a.size, c: sol.counts[j] });
+    });
+    pairs.sort(function (x, y) { return x.s - y.s; });
+    return pairs.map(function (p) { return p.s + ':' + p.c; }).join('|');
+  }
+
+  function topList(list, cmp, active) {
+    const arr = list.slice().sort(cmp);
+    const out = [];
+    const seen = new Set();
+    for (let i = 0; i < arr.length; i++) {
+      const key = canonicalKey(arr[i], active);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(arr[i]);
+      if (out.length >= STORE_LIMIT) break;
     }
+    return out;
+  }
 
-    calculateButton.addEventListener('click', function() {
-        const totalGrams = parseFloat(totalGramsInput.value);
-        if (isNaN(totalGrams) || totalGrams <= 0) {
-            alert('请输入有效的总克数');
-            return;
-        }
+  function featureVector(sol, active, total) {
+    return active.map(function (a, j) {
+      return (sol.counts[j] * a.size) / total;
+    });
+  }
 
-        const sizes = sizeInputs.map(input => {
-            const val = input.value.trim();
-            if (val === "") return 0;
-            const num = parseFloat(val);
-            if (isNaN(num)) return NaN;
-            return num;
-        });
-        if (sizes.some(isNaN)) {
-            alert('请输入有效的分装大小');
-            return;
-        }
+  function l1(a, b) {
+    let sum = 0;
+    for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+    return sum;
+  }
 
-        const requiredSize = requiredSizeSelect.value;
+  function diversify(list, maxCount, active, total) {
+    if (list.length <= maxCount) return list.slice();
+    const feats = list.map(function (s) { return featureVector(s, active, total); });
+    const n = list.length;
+    const selected = new Array(n).fill(false);
+    const minD = new Array(n).fill(Infinity);
+    const out = [list[0]];
+    selected[0] = true;
+    for (let i = 1; i < n; i++) minD[i] = l1(feats[i], feats[0]);
+    while (out.length < maxCount) {
+      let best = -1;
+      let bestD = -1;
+      for (let i = 0; i < n; i++) {
+        if (!selected[i] && minD[i] > bestD) { bestD = minD[i]; best = i; }
+      }
+      if (best < 0 || bestD < MIN_DIVERGENCE) break;
+      selected[best] = true;
+      out.push(list[best]);
+      for (let i = 0; i < n; i++) {
+        if (selected[i]) continue;
+        const d = l1(feats[i], feats[best]);
+        if (d < minD[i]) minD[i] = d;
+      }
+    }
+    return out;
+  }
 
-        let bestValue = -1;
-        let bestSolutions = [];
-        let uniqueKeys = new Set();
+  function compute() {
+    const total = parseFloat(totalGramsInput.value);
+    if (isNaN(total) || total <= 0) { alert('请输入有效的总克数'); return; }
+    const maxLossRaw = parseFloat(maxLossInput.value);
+    const maxLoss = (isNaN(maxLossRaw) || maxLossRaw < 0) ? 0 : maxLossRaw;
 
-        for (let a = 1; a < 10; a++) {
-            for (let b = 0; b < 10; b++) {
-                for (let c = 0; c < 10; c++) {
-                    for (let d = 0; d < 10; d++) {
-                        for (let e = 0; e < 10; e++) {
-                            // Check required size
-                            if (requiredSize === 'size1' && a < 1) continue;
-                            if (requiredSize === 'size2' && b < 1) continue;
-                            if (requiredSize === 'size3' && c < 1) continue;
-                            if (requiredSize === 'size4' && d < 1) continue;
-                            if (requiredSize === 'size5' && e < 1) continue;
-
-                            // Note: Original code had if (b + c <= 0) continue; but since b,c >=0, only when b=c=0
-                            // Assuming it's a mistake, perhaps meant b + c > 0 or something, but to match, we skip if b+c <=0
-                            if (b + c <= 0) {
-                                continue;
-                            }
-
-                            const value = a * sizes[0] + b * sizes[1] + c * sizes[2] + d * sizes[3] + e * sizes[4];
-                            if (value <= totalGrams) {
-                                const key = formatKey([a, b, c, d, e], sizes);
-                                if (value > bestValue) {
-                                    bestValue = value;
-                                    bestSolutions = [[a, b, c, d, e]];
-                                    uniqueKeys = new Set([key]);
-                                } else if (value === bestValue) {
-                                    if (!uniqueKeys.has(key)) {
-                                        uniqueKeys.add(key);
-                                        bestSolutions.push([a, b, c, d, e]);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        bestValueDiv.textContent = bestValue.toFixed(1);
-        bestSolutionsDiv.innerHTML = bestSolutions.map(sol => formatSolution(sol, sizes)).join('<br>') + `<br>剩余 ${(totalGrams - bestValue).toFixed(1)} 克`;
-
-        calcStepsDiv.textContent = `计算完成。最佳值: ${bestValue.toFixed(1)}, 解决方案数量: ${bestSolutions.length}`;
+    const sizes = sizeInputs.map(function (input) {
+      const val = input.value.trim();
+      if (val === '') return 0;
+      const num = parseFloat(val);
+      return (isNaN(num) || num < 0) ? 0 : num;
     });
 
-    // Update on input change or blur
-    sizeInputs.forEach(input => {
-        input.addEventListener('input', updateSelectOptions);
-        input.addEventListener('blur', updateSelectOptions);
+    const active = [];
+    sizes.forEach(function (size, index) {
+      if (size > 0 && size <= total + EPS) {
+        active.push({ size: size, origIndex: index, color: COLORS[active.length % COLORS.length] });
+      }
     });
+    if (active.length === 0) { alert('请至少输入一个不超过总克数的分装规格'); return; }
+
+    const reqVal = requiredSizeSelect.value;
+    let requiredOrigIdx = -1;
+    if (reqVal && reqVal.indexOf('size') === 0) requiredOrigIdx = parseInt(reqVal.slice(4), 10) - 1;
+    const requiredActiveIdx = active.findIndex(function (a) { return a.origIndex === requiredOrigIdx; });
+
+    const result = enumerate(total, active, requiredActiveIdx);
+    if (!result.list.length) { alert('没有可行的分装方案，请调整参数'); return; }
+
+    function within(sol) { return sol.waste <= maxLoss + 1e-6; }
+    const withinList = result.list.filter(within);
+    const base = withinList.length ? withinList : result.list;
+
+    const minSize = Math.min.apply(null, active.map(function (a) { return a.size; }));
+    const imax = Math.max(1, Math.floor((total + EPS) / minSize));
+
+    function balanceScore(sol) {
+      const w = maxLoss > 0 ? sol.waste / maxLoss : (sol.waste > EPS ? 1e9 : 0);
+      return w + sol.imb / imax;
+    }
+
+    let minWaste = Infinity;
+    let minImb = Infinity;
+    let minScore = Infinity;
+    base.forEach(function (s) {
+      if (s.waste < minWaste) minWaste = s.waste;
+      if (s.imb < minImb) minImb = s.imb;
+      const sc = balanceScore(s);
+      if (sc < minScore) minScore = sc;
+    });
+
+    const WASTE_BAND = Math.max(0.5, maxLoss * 0.1);
+    const IMB_BAND = 2;
+    const SCORE_BAND = 0.15;
+
+    const wasteLimit = minWaste <= 0.05 ? 0.5 : minWaste + WASTE_BAND;
+    const minwasteList = base.filter(function (s) { return s.waste <= wasteLimit + 1e-9; });
+    const evenList = base.filter(function (s) { return s.imb <= minImb + IMB_BAND; });
+    const balanceList = base.filter(function (s) { return balanceScore(s) <= minScore + SCORE_BAND + 1e-9; });
+
+    const strategies = {
+      balance: {
+        desc: STRATEGIES[0].desc + '（筛选：综合折中分 ≤ 最优 + ' + SCORE_BAND.toFixed(2) + '，并按差异精选）',
+        list: diversify(topList(balanceList.length ? balanceList : base, function (a, b) {
+          return balanceScore(a) - balanceScore(b) || a.waste - b.waste || a.imb - b.imb;
+        }, active), MAX_SHOWN, active, total)
+      },
+      minwaste: {
+        desc: STRATEGIES[1].desc + (minWaste <= 0.05
+          ? '（存在 0 损失方案，仅保留损失 ≤ 0.5g 的方案，并按差异精选）'
+          : '（筛选：损失 ≤ ' + fmt(wasteLimit) + 'g，并按差异精选）'),
+        list: diversify(topList(minwasteList.length ? minwasteList : base, function (a, b) {
+          return a.waste - b.waste || balanceScore(a) - balanceScore(b) || a.imb - b.imb || a.packs - b.packs;
+        }, active), MAX_SHOWN, active, total)
+      },
+      even: {
+        desc: STRATEGIES[2].desc + '（筛选：包数差 ≤ 最优 + ' + IMB_BAND + '，并按差异精选）',
+        list: diversify(topList(evenList.length ? evenList : base, function (a, b) {
+          return a.imb - b.imb || a.waste - b.waste || a.packs - b.packs;
+        }, active), MAX_SHOWN, active, total)
+      }
+    };
+
+    state = {
+      total: total,
+      maxLoss: maxLoss,
+      active: active,
+      strategies: strategies,
+      current: 'balance',
+      page: { balance: 1, minwaste: 1, even: 1 }
+    };
+
+    const specText = active.map(function (a) { return trimNum(a.size) + 'g'; }).join(' / ');
+    summaryEl.textContent = '总克数 ' + fmt(total) + 'g · 规格 ' + specText + ' · 可接受损失 ' + fmt(maxLoss) + 'g'
+      + (result.capped ? '（规格较多，已限制单个规格最大包数以保持计算速度）' : '');
+
+    resultsSection.hidden = false;
+    renderTabs();
+    renderPanel();
+    resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function titleHTML(sol, active) {
+    const parts = [];
+    active.forEach(function (a, j) {
+      if (sol.counts[j] > 0) {
+        parts.push('<span class="tv"><span class="dot" style="background:' + a.color + '"></span>'
+          + trimNum(a.size) + 'g × ' + sol.counts[j] + '</span>');
+      }
+    });
+    return parts.join('<span class="plus">+</span>');
+  }
+
+  function stackHTML(sol, total, active) {
+    let html = '<div class="stack">';
+    active.forEach(function (a, j) {
+      const w = sol.counts[j] * a.size;
+      if (w <= 0) return;
+      const pct = (w / total) * 100;
+      const label = pct > 9 ? String(sol.counts[j]) : '';
+      html += '<div class="seg" style="width:' + pct.toFixed(3) + '%;background:' + a.color + '"'
+        + ' title="' + trimNum(a.size) + 'g × ' + sol.counts[j] + ' = ' + fmt(w) + 'g">' + label + '</div>';
+    });
+    const loss = total - sol.used;
+    if (loss > EPS) {
+      const pct = (loss / total) * 100;
+      const label = pct > 12 ? ('损失 ' + fmt(loss) + 'g') : '';
+      html += '<div class="seg loss" style="width:' + pct.toFixed(3) + '%" title="损失 ' + fmt(loss) + 'g">' + label + '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function metricsHTML(sol) {
+    return '<div class="metrics">'
+      + '<span>总量 <b>' + fmt(sol.used) + 'g</b></span>'
+      + '<span>损失 <b>' + fmt(sol.waste) + 'g</b></span>'
+      + '<span>包数 <b>' + sol.packs + '</b></span>'
+      + '<span>包数差 <b>' + sol.imb + '</b></span>'
+      + '</div>';
+  }
+
+  function bestHTML(sol, total, active) {
+    return '<div class="best">'
+      + '<div class="best-head"><span class="best-label">最佳方案</span><span class="badge">' + sol.packs + ' 包</span></div>'
+      + '<div class="sol-title big">' + titleHTML(sol, active) + '</div>'
+      + stackHTML(sol, total, active)
+      + metricsHTML(sol)
+      + '</div>';
+  }
+
+  function solHTML(sol, total, active) {
+    return '<div class="sol">'
+      + '<div class="sol-head"><span class="sol-title">' + titleHTML(sol, active) + '</span>'
+      + '<span class="sol-meta">损失 ' + fmt(sol.waste) + 'g · 包数差 ' + sol.imb + '</span></div>'
+      + stackHTML(sol, total, active)
+      + metricsHTML(sol)
+      + '</div>';
+  }
+
+  function renderTabs() {
+    tabsEl.innerHTML = STRATEGIES.map(function (s) {
+      return '<button class="tab" role="tab" data-id="' + s.id + '" aria-selected="'
+        + (s.id === state.current) + '">' + s.name + '</button>';
+    }).join('');
+    Array.prototype.forEach.call(tabsEl.querySelectorAll('.tab'), function (btn) {
+      btn.addEventListener('click', function () {
+        state.current = btn.dataset.id;
+        renderTabs();
+        renderPanel();
+      });
+    });
+  }
+
+  function renderPanel() {
+    const id = state.current;
+    const st = state.strategies[id];
+    const active = state.active;
+
+    if (!st || !st.list.length) {
+      panelEl.innerHTML = '<p class="hint">没有满足条件的方案。</p>';
+      return;
+    }
+
+    const best = st.list[0];
+    const alts = st.list.slice(1).sort(function (a, b) { return b.packs - a.packs; });
+    const totalPages = Math.max(1, Math.ceil(alts.length / PAGE_SIZE));
+    let page = state.page[id];
+    if (page > totalPages) page = totalPages;
+    if (page < 1) page = 1;
+    state.page[id] = page;
+    const start = (page - 1) * PAGE_SIZE;
+    const visible = alts.slice(start, start + PAGE_SIZE);
+
+    const groups = new Map();
+    visible.forEach(function (s) {
+      if (!groups.has(s.packs)) groups.set(s.packs, []);
+      groups.get(s.packs).push(s);
+    });
+    const order = Array.from(groups.keys()).sort(function (a, b) { return b - a; });
+
+    let groupsHTML = '';
+    order.forEach(function (p) {
+      const items = groups.get(p);
+      groupsHTML += '<div class="group"><div class="group-title">共 ' + p + ' 包 · ' + items.length + ' 个方案</div>'
+        + items.map(function (s) { return solHTML(s, state.total, active); }).join('')
+        + '</div>';
+    });
+
+    let pagerHTML = '';
+    if (totalPages > 1) {
+      pagerHTML = '<div class="pager">'
+        + '<button id="prevPage"' + (page <= 1 ? ' disabled' : '') + '>上一页</button>'
+        + '<span class="page-info">第 ' + page + ' / ' + totalPages + ' 页（共 ' + alts.length + ' 个其他方案）</span>'
+        + '<button id="nextPage"' + (page >= totalPages ? ' disabled' : '') + '>下一页</button>'
+        + '</div>';
+    }
+
+    panelEl.innerHTML = '<p class="strategy-desc">' + st.desc + '</p>'
+      + bestHTML(best, state.total, active)
+      + (order.length ? '<div class="group-title" style="margin-top:8px">其他方案（按包数分组）</div>' : '')
+      + groupsHTML
+      + pagerHTML;
+
+    const prevBtn = document.getElementById('prevPage');
+    const nextBtn = document.getElementById('nextPage');
+    if (prevBtn) {
+      prevBtn.addEventListener('click', function () {
+        state.page[id] = Math.max(1, state.page[id] - 1);
+        renderPanel();
+      });
+    }
+    if (nextBtn) {
+      nextBtn.addEventListener('click', function () {
+        state.page[id] = Math.min(totalPages, state.page[id] + 1);
+        renderPanel();
+      });
+    }
+  }
+
+  sizeInputs.forEach(function (input) {
+    input.addEventListener('input', updateSelectOptions);
+    input.addEventListener('change', updateSelectOptions);
+  });
+
+  calculateButton.addEventListener('click', compute);
+
+  updateSelectOptions();
 });
