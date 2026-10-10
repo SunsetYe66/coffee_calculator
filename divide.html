@@ -4,94 +4,119 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Coffee Divide Calculator</title>
-  <!-- 引入外部样式（已分离为 style.css） -->
   <link rel="stylesheet" href="style.css">
-  <!-- KaTeX CDN，用于渲染数学公式（可选） -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" crossorigin="anonymous">
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js" crossorigin="anonymous"></script>
   <style>
-    /* 全局盒模型，避免宽度计算导致溢出 */
-    *, *::before, *::after {
-      box-sizing: border-box;
+    *, *::before, *::after { box-sizing: border-box; }
+
+    .row { display: flex; gap: 16px; align-items: flex-end; margin: 10px 0; flex-wrap: wrap; }
+    .col { flex: 1; min-width: 160px; }
+
+    .summary {
+      font-size: 13px;
+      color: #475569;
+      background: #f8fafc;
+      border: 1px solid #eef2f7;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 4px;
+      line-height: 1.6;
     }
 
-    .modes {
+    .tabs {
       display: flex;
+      gap: 4px;
       flex-wrap: wrap;
-      gap: 12px;
-      align-items: center;
+      border-bottom: 1px solid #e2e8f0;
+      margin: 16px 0 14px;
     }
-
-    .modes label {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      margin: 0;
-    }
-
-    .modes input[type="radio"] {
-      margin: 0;
-      flex: 0 0 auto;
-    }
-
-    /* Tab 样式 */
-    .mode-tab {
+    .tab {
       appearance: none;
-      border: 1px solid #e2e8f0;
-      background: #fff;
-      padding: 8px 12px;
-      border-radius: 6px;
+      border: none;
+      background: transparent;
+      padding: 10px 16px;
       cursor: pointer;
       font-size: 14px;
+      color: #64748b;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      border-radius: 6px 6px 0 0;
     }
+    .tab:hover { color: #0f172a; background: #f8fafc; }
+    .tab[aria-selected="true"] { color: #0f172a; font-weight: 600; border-bottom-color: #4e79a7; }
 
-    .mode-tab[aria-selected="true"] {
-      background: #f1f5f9;
-      border-color: #cbd5e1;
-      box-shadow: 0 1px 0 rgba(0,0,0,0.02) inset;
+    .strategy-desc { color: #64748b; font-size: 13px; margin: 0 0 14px; line-height: 1.6; }
+
+    .best {
+      border: 1px solid #dbeafe;
+      background: linear-gradient(180deg, #f8fbff, #ffffff);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 18px;
     }
+    .best-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    .best-label { font-size: 12px; letter-spacing: .04em; color: #4e79a7; font-weight: 600; text-transform: uppercase; }
+    .badge { background: #4e79a7; color: #fff; border-radius: 999px; padding: 2px 10px; font-size: 12px; }
 
+    .sol-title { font-size: 14px; font-weight: 600; color: #0f172a; }
+    .sol-title.big { font-size: 16px; margin: 8px 0 10px; }
 
-    /* 计算区域：普通文本允许换行，遇到超长内容（如 KaTeX 公式）时横向滚动显示完整内容 */
-    #calcArea {
-      max-width: 100%;
-      overflow-x: auto; /* 整个计算区域在必要时横向滚动 */
-      -webkit-overflow-scrolling: touch;
+    .stack {
+      display: flex;
+      height: 24px;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #eef2f7;
+      border: 1px solid #e2e8f0;
+      margin-top: 8px;
     }
-
-    #calcSteps {
-      max-width: 100%;
-      overflow-x: auto; /* 允许内部横向滚动以显示完整公式 */
-      -webkit-overflow-scrolling: touch;
-      white-space: normal; /* 普通文本可换行 */
-      word-wrap: break-word;
-    }
-
-    /* KaTeX 渲染区域：防止逐字断行，单独横向滚动公式内容 */
-    .katex, .katex-display {
-      display: inline-block; /* 保持为行内块，随文本流布局 */
-      white-space: nowrap;    /* 不在公式内部逐字换行 */
-      max-width: none;
-      overflow: visible;
-    }
-
-    .katex * {
-      white-space: nowrap !important;
-    }
-
-    /* 一些浏览器滚动样式优化 */
-    #calcArea::-webkit-scrollbar, #calcSteps::-webkit-scrollbar {
-      height: 10px;
-    }
-
-    /* 避免整个页面在极窄视窗下出现最外层阻止收缩的问题 */
-    body, .card {
+    .stack .seg {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
       min-width: 0;
     }
+    .stack .seg.loss {
+      background: repeating-linear-gradient(45deg, #e2e8f0, #e2e8f0 6px, #f1f5f9 6px, #f1f5f9 12px);
+      color: #64748b;
+    }
+
+    .sol-title .dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 5px; vertical-align: -1px; }
+    .sol-title .plus { color: #cbd5e1; margin: 0 6px; font-weight: 400; }
+
+    .metrics { font-size: 12.5px; color: #64748b; margin-top: 8px; display: flex; gap: 16px; flex-wrap: wrap; }
+    .metrics b { color: #0f172a; font-weight: 600; }
+
+    .group { margin-top: 16px; }
+    .group-title { font-size: 12.5px; color: #64748b; font-weight: 600; margin: 0 0 8px; }
+    .sol { border: 1px solid #eef2f7; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; background: #fff; }
+    .sol-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .sol-meta { font-size: 12px; color: #94a3b8; white-space: nowrap; }
+
+    .pager { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+    .pager button {
+      appearance: none;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      border-radius: 6px;
+      padding: 7px 14px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #334155;
+    }
+    .pager button:hover:not(:disabled) { background: #f8fafc; }
+    .pager button:disabled { opacity: .45; cursor: default; }
+    .pager .page-info { font-size: 13px; color: #64748b; }
+
+    #results[hidden] { display: none; }
   </style>
 </head>
 <body>
-  <h1><a href="index.html">Extraction Calculator</a> | Divide Calculator</h1> 
+  <h1><a href="index.html">Extraction Calculator</a> | Divide Calculator</h1>
+
   <div class="card">
     <div id="inputs">
       <div class="row">
@@ -99,41 +124,40 @@
           <label>总克数 total grams</label>
           <input id="totalGrams" type="number" min="0" step="0.1" value="100">
         </div>
-      </div>
-
-      <div class="row">
         <div class="col">
-          <label>分装大小 1 size1 (g)</label>
-          <input id="size1" type="number" min="0" step="0.1" value="15">
-        </div>
-        <div class="col">
-          <label>分装大小 2 size2 (g)</label>
-          <input id="size2" type="number" min="0" step="0.1" value="13">
-        </div>
-        <div class="col">
-          <label>分装大小 3 size3 (g)</label>
-          <input id="size3" type="number" min="0" step="0.1" value="12">
+          <label>可接受损失 max loss (g)</label>
+          <input id="maxLoss" type="number" min="0" step="0.1" value="3">
         </div>
       </div>
 
       <div class="row">
         <div class="col">
-          <label>分装大小 4 size4 (g)</label>
+          <label>分装规格 1 (g)</label>
+          <input id="size1" type="number" min="0" step="0.1" value="10">
+        </div>
+        <div class="col">
+          <label>分装规格 2 (g)</label>
+          <input id="size2" type="number" min="0" step="0.1" value="15">
+        </div>
+        <div class="col">
+          <label>分装规格 3 (g)</label>
+          <input id="size3" type="number" min="0" step="0.1" value="19">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col">
+          <label>分装规格 4 (g)</label>
           <input id="size4" type="number" min="0" step="0.1" value="">
         </div>
         <div class="col">
-          <label>分装大小 5 size5 (g)</label>
+          <label>分装规格 5 (g)</label>
           <input id="size5" type="number" min="0" step="0.1" value="">
         </div>
         <div class="col">
-          <label>必须存在的分装大小</label>
+          <label>必须包含的规格</label>
           <select id="requiredSize">
             <option value="none">无</option>
-            <option value="size1">size1</option>
-            <option value="size2">size2</option>
-            <option value="size3">size3</option>
-            <option value="size4">size4</option>
-            <option value="size5">size5</option>
           </select>
         </div>
       </div>
@@ -142,21 +166,16 @@
         <button id="calculate">计算</button>
       </div>
 
-      <div class="hint">数值单位：克。重量保留 1 位小数。</div>
+      <div class="hint">数值单位：克，重量保留 1 位小数。点击计算后可切换三种分装策略。</div>
     </div>
   </div>
 
-  <div class="outputs">
-    <div class="out">
-      <div class="small">最佳总克数 (best value)</div>
-      <div id="bestValue" style="font-size:18px;margin-top:6px">-</div>
-    </div>
-    <div class="out">
-      <div class="small">最佳解决方案 (best solutions)</div>
-      <div id="bestSolutions" style="font-size:14px;margin-top:6px">-</div>
-    </div>
-  </div>
-  <!-- 引入分离出的脚本文件 -->
+  <section id="results" hidden>
+    <div class="summary" id="summary"></div>
+    <div class="tabs" id="strategyTabs" role="tablist" aria-label="分装策略"></div>
+    <div id="strategyPanel"></div>
+  </section>
+
   <script src="divide.js" defer></script>
 </body>
 </html>
