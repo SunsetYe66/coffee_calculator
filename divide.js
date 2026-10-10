@@ -65,49 +65,131 @@ document.addEventListener('DOMContentLoaded', function () {
     if (exists) requiredSizeSelect.value = current;
   }
 
-  function enumerate(total, active, requiredActiveIdx) {
+  function enumerate(total, active, requiredActiveIdx, maxLoss) {
     const k = active.length;
-    const perMax = active.map(function (a) {
-      return Math.floor((total + EPS) / a.size);
-    });
-    let product = 1;
-    perMax.forEach(function (m) { product *= (m + 1); });
-    let cap = Infinity;
-    let capped = false;
-    if (product > MAX_NODES) {
-      capped = true;
-      cap = Math.max(1, Math.ceil(Math.pow(MAX_NODES, 1 / k)));
+    const G = 10;
+    const s = active.map(function (a) { return Math.round(a.size * G); });
+    const T = Math.round(total * G);
+    const band = Math.max(0, Math.round(maxLoss * G));
+
+    const reach = new Uint8Array(T + 1);
+    const parent = new Int16Array(T + 1);
+    parent.fill(-1);
+    reach[0] = 1;
+    for (let v = 0; v <= T; v++) {
+      if (!reach[v]) continue;
+      for (let i = 0; i < k; i++) {
+        const nv = v + s[i];
+        if (nv <= T && !reach[nv]) { reach[nv] = 1; parent[nv] = i; }
+      }
+    }
+    let bestUsed = T;
+    while (bestUsed > 0 && !reach[bestUsed]) bestUsed--;
+
+    let minUsed = T - band;
+    if (minUsed < 0) minUsed = 0;
+    if (bestUsed < minUsed) {
+      const extra = Math.max(1, Math.round(Math.max(0.5, maxLoss * 0.1) * G));
+      minUsed = Math.max(0, bestUsed - extra);
+    }
+
+    const reachSuf = new Array(k + 1);
+    reachSuf[k] = new Uint8Array(T + 1);
+    reachSuf[k][0] = 1;
+    for (let i = k - 1; i >= 0; i--) {
+      const cur = new Uint8Array(T + 1);
+      const nxt = reachSuf[i + 1];
+      const si = s[i];
+      for (let v = 0; v <= T; v++) {
+        cur[v] = (nxt[v] || (v >= si && cur[v - si])) ? 1 : 0;
+      }
+      reachSuf[i] = cur;
+    }
+    const sr = new Array(k + 1);
+    for (let i = 0; i <= k; i++) {
+      const arr = new Int32Array(T + 2);
+      arr[T + 1] = T + 1;
+      let nx = T + 1;
+      for (let v = T; v >= 0; v--) {
+        if (reachSuf[i][v]) nx = v;
+        arr[v] = nx;
+      }
+      sr[i] = arr;
     }
 
     const list = [];
     const counts = new Array(k).fill(0);
+    let nodes = 0;
+    let capped = false;
+
+    function push(usedScaled) {
+      let mx = -Infinity;
+      let mn = Infinity;
+      let packs = 0;
+      for (let j = 0; j < k; j++) {
+        const c = counts[j];
+        packs += c;
+        if (c > mx) mx = c;
+        if (c < mn) mn = c;
+      }
+      list.push({
+        counts: counts.slice(),
+        used: usedScaled / G,
+        waste: total - usedScaled / G,
+        packs: packs,
+        imb: mx - mn
+      });
+    }
 
     function rec(i, remaining, used) {
+      if (nodes++ > MAX_NODES) { capped = true; return; }
+      const need = minUsed - used;
+      if (need > 0 && sr[i][need > T ? T : need] > remaining) return;
       if (i === k) {
+        if (used < minUsed) return;
         if (requiredActiveIdx >= 0 && counts[requiredActiveIdx] < 1) return;
-        let mx = -Infinity;
-        let mn = Infinity;
-        let packs = 0;
-        for (let j = 0; j < k; j++) {
-          const c = counts[j];
-          packs += c;
-          if (c > mx) mx = c;
-          if (c < mn) mn = c;
-        }
-        list.push({ counts: counts.slice(), used: used, waste: total - used, packs: packs, imb: mx - mn });
+        push(used);
         return;
       }
-      const s = active[i].size;
-      let maxN = Math.floor((remaining + EPS) / s);
-      if (maxN > cap) maxN = cap;
-      for (let n = 0; n <= maxN; n++) {
+      const si = s[i];
+      const maxN = Math.floor(remaining / si);
+      for (let n = maxN; n >= 0; n--) {
         counts[i] = n;
-        rec(i + 1, remaining - n * s, used + n * s);
+        rec(i + 1, remaining - n * si, used + n * si);
       }
       counts[i] = 0;
     }
 
-    rec(0, total, 0);
+    rec(0, T, 0);
+
+    const optCounts = new Array(k).fill(0);
+    let vv = bestUsed;
+    let optOk = true;
+    while (vv > 0) {
+      const i = parent[vv];
+      if (i < 0) { optOk = false; break; }
+      optCounts[i]++;
+      vv -= s[i];
+    }
+    if (optOk && (requiredActiveIdx < 0 || optCounts[requiredActiveIdx] >= 1)) {
+      let mx = -Infinity;
+      let mn = Infinity;
+      let packs = 0;
+      for (let j = 0; j < k; j++) {
+        const c = optCounts[j];
+        packs += c;
+        if (c > mx) mx = c;
+        if (c < mn) mn = c;
+      }
+      list.push({
+        counts: optCounts,
+        used: bestUsed / G,
+        waste: total - bestUsed / G,
+        packs: packs,
+        imb: mx - mn
+      });
+    }
+
     return { list: list, capped: capped };
   }
 
@@ -176,6 +258,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function compute() {
     const total = parseFloat(totalGramsInput.value);
     if (isNaN(total) || total <= 0) { alert('请输入有效的总克数'); return; }
+    if (total * 10 > 1000000) { alert('总克数过大，请保持在 100000g 以内'); return; }
     const maxLossRaw = parseFloat(maxLossInput.value);
     const maxLoss = (isNaN(maxLossRaw) || maxLossRaw < 0) ? 0 : maxLossRaw;
 
@@ -188,7 +271,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const active = [];
     sizes.forEach(function (size, index) {
-      if (size > 0 && size <= total + EPS) {
+      if (size > 0 && size <= total + EPS && Math.round(size * 10) > 0) {
         active.push({ size: size, origIndex: index, color: COLORS[active.length % COLORS.length] });
       }
     });
@@ -199,7 +282,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (reqVal && reqVal.indexOf('size') === 0) requiredOrigIdx = parseInt(reqVal.slice(4), 10) - 1;
     const requiredActiveIdx = active.findIndex(function (a) { return a.origIndex === requiredOrigIdx; });
 
-    const result = enumerate(total, active, requiredActiveIdx);
+    const result = enumerate(total, active, requiredActiveIdx, maxLoss);
     if (!result.list.length) { alert('没有可行的分装方案，请调整参数'); return; }
 
     function within(sol) { return sol.waste <= maxLoss + 1e-6; }
@@ -267,7 +350,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const specText = active.map(function (a) { return trimNum(a.size) + 'g'; }).join(' / ');
     summaryEl.textContent = '总克数 ' + fmt(total) + 'g · 规格 ' + specText + ' · 可接受损失 ' + fmt(maxLoss) + 'g'
-      + (result.capped ? '（规格较多，已限制单个规格最大包数以保持计算速度）' : '');
+      + (result.capped ? '（方案较多，已限制候选规模以保持计算速度）' : '');
 
     resultsSection.hidden = false;
     renderTabs();
